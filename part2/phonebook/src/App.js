@@ -1,19 +1,22 @@
 import { useState, useEffect } from 'react'
 import axios from "axios";
 
+import Person from './components/Person';
+import personService from './services/persons'
+
 const App = () => {
 
-  useEffect(()=>{
-    axios.get('http://localhost:3002/persons')
-    .then(response => {
-      setPersons(response.data)
-    })
-  },[])
-  
+  useEffect(() => {
+    personService
+      .getAll().then(allPersons => {
+        setPersons(allPersons)
+      })
+  }, [])
+
   const [persons, setPersons] = useState([])
   const [newName, setNewName] = useState('')
   const [newNumber, setNewNumber] = useState('')
-  const [filterName, setFilterName] = useState('')
+  const [filterQuery, setFilterQuery] = useState('')
 
   const handleNameChange = (event) => {
     setNewName(event.target.value)
@@ -22,44 +25,70 @@ const App = () => {
     setNewNumber(event.target.value)
   }
   const handleFilterNameChange = (event) => {
-    setFilterName(event.target.value)
+    setFilterQuery(event.target.value)
   }
-  const personsToShow = filterName === '' ? persons : persons.filter(person => person.name.toLowerCase().includes(filterName.toLowerCase()))
+  const personsToShow = filterQuery === '' ? persons : persons.filter(person => person.name.toLowerCase().includes(filterQuery.toLowerCase()))
 
   const addPerson = (event) => {
     event.preventDefault()
     const alreadyExists = persons.some(person => person.name === newName)
     if (alreadyExists) {
-      window.alert(`${newName} is already added to phonebook`)
+      if(window.confirm(`${newName} is already added to phonebook, replace the old number with a new one?`)){
+        const person = persons.find(p => p.name === newName)
+        const id = person.id
+        const updatedPerson = { ...person, number : newNumber}
+
+        personService
+        .update(id, updatedPerson)
+        .then(returnedPerson => {
+          setPersons(persons.map(p => p.id !== id ? p : returnedPerson))
+        })
+      }
     }
     else {
-      const nameObject = {
-        id: persons.length+1,
+      const newObject = {
+        id: persons.length + 1,
         name: newName,
         number: newNumber
       }
-      setPersons(persons.concat(nameObject))
+      personService
+        .create(newObject)
+        .then(returnedPerson => {
+          setPersons(persons.concat(returnedPerson))
+          setNewName('')
+          setNewNumber('')
+        })
     }
-    setNewName('')
-    setNewNumber('')
+
+  }
+  const handleDeletePerson = (id, name) => {
+    if (window.confirm(`Delete ${name}`)) {
+      personService.deletePerson(id)
+        .then(returnedData => {
+          console.log(returnedData)
+          setPersons(persons.filter(person => person.id !== id))
+        })
+    }
   }
   return (
     <div className="App">
       <h2>Phonebook</h2>
-      <Filter filterName={filterName} handleFilterNameChange={handleFilterNameChange} />
+      <Filter filterQuery={filterQuery} handleFilterQueryChange={handleFilterNameChange} />
 
       <h2>Add a new</h2>
-      <PersonForm handleSubmit={addPerson} newName={newName} newNumber={newNumber} handleNameChange={handleNameChange} handleNumberChange={handleNumberChange}/>
-      
+      <PersonForm handleSubmit={addPerson} newName={newName} newNumber={newNumber} handleNameChange={handleNameChange} handleNumberChange={handleNumberChange} />
+
       <h2>Numbers</h2>
-      <Persons persons={personsToShow} />
+      {
+        personsToShow.map(person => <Person key={person.id} person={person} deletePerson={() => handleDeletePerson(person.id, person.name)} />)
+      }
     </div>
   );
 }
 
-const Filter = ({filterName, handleFilterNameChange}) => (
+const Filter = ({ filterQuery, handleFilterQueryChange }) => (
   <div>
-    filter shown with <input value={filterName} onChange={handleFilterNameChange} />
+    filter shown with <input value={filterQuery} onChange={handleFilterQueryChange} />
   </div>
 )
 
@@ -69,21 +98,17 @@ const PersonForm = (props) => {
   const handleNameChange = props.handleNameChange
   const handleNumberChange = props.handleNumberChange
   const addPerson = props.handleSubmit
-  return(
+  return (
     <form onSubmit={addPerson}>
-        <div>
-          <p>name: <input value={newName} onChange={handleNameChange} /> </p>
-          <p>number: <input value={newNumber} onChange={handleNumberChange} /> </p>
-        </div>
-        <div>
-          <button type='submit'>Add</button>
-        </div>
-      </form>
+      <div>
+        <p>name: <input value={newName} onChange={handleNameChange} /> </p>
+        <p>number: <input value={newNumber} onChange={handleNumberChange} /> </p>
+      </div>
+      <div>
+        <button type='submit'>Add</button>
+      </div>
+    </form>
   )
 }
-
-const Persons = ({ persons }) => (
-  persons.map(person => <p key={person.id}>{person.name} {person.number} </p>)
-)
 
 export default App;
